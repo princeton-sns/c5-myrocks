@@ -26,7 +26,7 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
 
   while (!info_thd->killed &&
          running_status == RUNNING &&
-         c_rli->dep_queue.empty())
+         (c_rli->dep_queue.empty()))//  || c_rli->queued_trx_count.load() > 3)) 
   {
     ++c_rli->begin_event_waits;
     ++c_rli->num_workers_waiting;
@@ -109,6 +109,7 @@ bool Dependency_slave_worker::execute_group()
     mysql_cond_signal(&c_rli->dep_trx_all_done_cond);
   mysql_mutex_unlock(&c_rli->dep_lock);
 
+  c_rli->executed_trx_count++;
   c_rli->cleanup_group(begin_event);
 
   return err == 0 && !info_thd->killed && running_status == RUNNING;
@@ -172,23 +173,33 @@ Dependency_slave_worker::finalize_event(std::shared_ptr<Log_event_wrapper> &ev)
    * 2) The "value" of the key-value pair is _not_ equal to this event. In this
    *    case, leave it be; the event corresponds to a later transaction.
    */
-  mysql_mutex_lock(&c_rli->dep_key_lookup_mutex);
-  if (likely(!c_rli->dep_key_lookup.empty()))
-  {
+
+  //mysql_mutex_lock(&c_rli->dep_key_lookup_mutex);
+  // if (likely(!c_rli->dep_key_lookup.empty()))
+  // {
     for (const auto& key : ev->keys)
     {
+      Relay_log_info::Last_writer_map::accessor ac;    
+      c_rli->dep_key_lookup.find(ac, key); 
+      if (ac->second == ev)
+      {
+        c_rli->dep_key_lookup.erase(ac);
+      }
+    
+      /*
       const auto it= c_rli->dep_key_lookup.find(key);
       DBUG_ASSERT(it != c_rli->dep_key_lookup.end());
 
-      /* Case 1. (Case 2 is implicitly handled by doing nothing.) */
+      // Case 1. (Case 2 is implicitly handled by doing nothing.) 
       if (it->second == ev)
       {
         c_rli->dep_key_lookup.erase(it);
       }
+      */
     }
-  }
+  // }
   ev->finalize();
-  mysql_mutex_unlock(&c_rli->dep_key_lookup_mutex);
+  //  mysql_mutex_unlock(&c_rli->dep_key_lookup_mutex);
 }
 
 Dependency_slave_worker::Dependency_slave_worker(Relay_log_info *rli

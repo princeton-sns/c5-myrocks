@@ -10,8 +10,11 @@ int slave_worker_exec_job(Slave_worker *worker, Relay_log_info *rli);
   */
 class Log_event_wrapper
 {
+  friend class Log_event_wrapper_queue;
+
   Log_event *raw_ev;
-  std::weak_ptr<Log_event_wrapper> begin_ev;
+  std::shared_ptr<Log_event_wrapper>   queue_next= nullptr;
+  std::weak_ptr<Log_event_wrapper>     begin_ev;
 
   // events that depend on us
   std::vector<std::shared_ptr<Log_event_wrapper>> dependents;
@@ -143,5 +146,82 @@ public:
     return db;
   }
 };
+
+class Log_event_wrapper_queue 
+{
+  std::shared_ptr<Log_event_wrapper>     head= nullptr;
+  std::shared_ptr<Log_event_wrapper>     tail= nullptr;
+  size_t                                 queue_size= 0;
+
+public:
+  Log_event_wrapper_queue()
+  {
+  }
+
+  size_t size()
+  {
+    return queue_size;
+  }
+
+  std::shared_ptr<Log_event_wrapper> get_iterator()
+  {
+    return head;
+  }
+
+  std::shared_ptr<Log_event_wrapper> next(std::shared_ptr<Log_event_wrapper> ev)
+  {
+    return ev->queue_next;
+  }
+
+  void enqueue(std::shared_ptr<Log_event_wrapper> ev)
+  {
+    DBUG_ASSERT(head != nullptr || tail == nullptr );
+    
+    ev->queue_next= nullptr;
+    if (tail == nullptr) 
+      head= ev;
+    else 
+      tail->queue_next= ev;
+
+    tail= ev;
+    ++queue_size;
+  }
+
+  std::shared_ptr<Log_event_wrapper> dequeue()
+  {
+    DBUG_ASSERT(head != nullptr || tail == nullptr );
+
+    auto ret= head;
+    head= ret->queue_next;
+    if (tail == ret)
+    {
+       tail= head; 
+    }
+    ret->queue_next= nullptr;
+    --queue_size;
+    return ret;
+  }
+
+  void clear()
+  {
+    auto it= head;
+    while (it != nullptr) 
+    {
+      auto prev= it;
+      it= it->queue_next;
+      prev->queue_next= nullptr;
+    }
+    head= nullptr;
+    tail= nullptr;
+    queue_size= 0;
+  }
+
+  bool empty() 
+  {
+    return head == nullptr;
+  }
+};
+
+
 
 #endif // LOG_EVENT_WRAPPER_H

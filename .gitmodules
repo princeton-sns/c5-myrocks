@@ -4,3 +4,9 @@
 [submodule "rqg"]
 	path = rqg
 	url = https://github.com/yoshinorim/rqg.git
+[submodule "tbb"]
+	path = tbb
+	url = https://github.com/01org/tbb.git
+[submodule "cityhash"]
+	path = cityhash
+	url = https://github.com/google/cityhash.git

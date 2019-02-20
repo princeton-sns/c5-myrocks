@@ -25,6 +25,8 @@
 #include "log.h"                         /* LOG_INFO */
 #include "binlog.h"                      /* MYSQL_BIN_LOG */
 #include "sql_class.h"                   /* THD */
+#include "tbb/concurrent_hash_map.h"
+#include "tbb/concurrent_queue.h"
 
 #if defined(HAVE_REPLICATION) && !defined(MYSQL_CLIENT)
 #include "log_event_wrapper.h"
@@ -1111,15 +1113,29 @@ public:
 
 #if defined(HAVE_REPLICATION) && !defined(MYSQL_CLIENT)
   /* Related to dependency tracking */
-
   std::deque<std::shared_ptr<Log_event_wrapper>> dep_queue;
   mysql_mutex_t dep_lock;
+  Log_event_wrapper_queue wrapper_queue;
+
+  std::atomic<std::uint64_t> queued_trx_count;
+  std::atomic<std::uint64_t> executed_trx_count; 
+  uint64_t last_queued_count= 0;
+  uint64_t last_exec_count= 0;
+  uint32_t wakeups=0;
+  std::chrono::time_point<std::chrono::steady_clock> start_time;
+  std::chrono::time_point<std::chrono::steady_clock> end_time; 
+
 
   /* Mapping from key to penultimate (for multi event trx)/end event of the
      last trx that updated that table */
+  /*
   std::unordered_map<Dependency_key, std::shared_ptr<Log_event_wrapper>>
                                             dep_key_lookup;
+  */                                          
   mysql_mutex_t dep_key_lookup_mutex;
+  typedef tbb::concurrent_hash_map<Dependency_key, std::shared_ptr<Log_event_wrapper>, 
+                                   Dependency_key> Last_writer_map; 
+  Last_writer_map dep_key_lookup;
 
   /* Set of keys accessed by the group */
   std::unordered_set<Dependency_key> keys_accessed_by_group;

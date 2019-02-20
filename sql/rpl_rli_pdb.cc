@@ -609,12 +609,15 @@ bool Slave_worker::commit_positions(Log_event *ev, Slave_job_group* ptr_g, bool 
       my_free(ptr_g->checkpoint_relay_log_name);
     ptr_g->checkpoint_relay_log_name= NULL;
 
-    bitmap_copy(&group_shifted, &group_executed);
-    bitmap_clear_all(&group_executed);
-    for (uint pos= ptr_g->shifted; pos < c_rli->checkpoint_group; pos++)
-    {
-      if (bitmap_is_set(&group_shifted, pos))
-        bitmap_set_bit(&group_executed, pos - ptr_g->shifted);
+    if (unlikely(ptr_g->shifted != 0)) {
+      bitmap_copy(&group_shifted, &group_executed);
+      bitmap_clear_all(&group_executed);
+
+      for (uint pos= ptr_g->shifted; pos < c_rli->checkpoint_group; pos++)
+      {
+        if (bitmap_is_set(&group_shifted, pos))
+          bitmap_set_bit(&group_executed, pos - ptr_g->shifted);
+      }
     }
   }
   /*

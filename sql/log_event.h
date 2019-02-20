@@ -29,6 +29,7 @@
 #define _log_event_h
 
 #include <memory>
+#include <city.h>
 #include <my_bitmap.h>
 #include "rpl_constants.h"
 #include "table_id.h"
@@ -75,6 +76,7 @@ struct Dependency_key
     key_length= 0;
   }
 
+
   bool operator==(const Dependency_key& other) const
   {
     return (key_length == other.key_length &&
@@ -87,6 +89,29 @@ struct Dependency_key
   {
     return !(*this == other);
   }
+
+  static size_t hash(const Dependency_key &k) 
+  {
+    using std::size_t;
+    using std::string;
+
+    uchar *buf= k.key_buffer.get();
+    if (k.key_length > 0)
+    {
+      auto key_hash= CityHash64((const char*)buf, (size_t)k.key_length);
+      auto tbl_hash= CityHash64((const char*)k.table_id.c_str(), (size_t)k.table_id.length());
+      return (std::size_t)Hash128to64(std::make_pair(tbl_hash, key_hash));
+    }
+    else
+    {
+      return CityHash64((const char*)k.table_id.c_str(), (size_t)k.table_id.length());
+    }
+  }
+
+  static bool equal(const Dependency_key &k1, const Dependency_key &k2)
+  {
+    return k1 == k2;
+  }
 };
 
 /* Override std::hash for Dependency_keys. */
@@ -97,26 +122,7 @@ namespace std
   {
     std::size_t operator() (const Dependency_key &k) const
     {
-      using std::size_t;
-      using std::hash;
-      using std::string;
-
-      size_t ret= 0;
-      uchar *buf= k.key_buffer.get();
-      if (k.key_length > 0)
-      {
-        ret= std::hash<uint>{}(k.key_length);
-        ret= (ret << 1) ^ std::hash<string>{}(k.table_id);
-        for (uint i= 0; i < k.key_length; ++i)
-        {
-          ret= (ret << 1) ^ std::hash<char>{}((char)buf[i]);
-        }
-      }
-      else
-      {
-        ret= std::hash<string>{}(k.table_id);
-      }
-      return ret;
+      return Dependency_key::hash(k);
     }
   };
 }

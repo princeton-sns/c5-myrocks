@@ -169,10 +169,18 @@ IF(WITH_DEFAULT_FEATURE_SET)
   INCLUDE(${CMAKE_SOURCE_DIR}/cmake/build_configurations/feature_set.cmake)
 ENDIF()
 
+SET(TBB_ROOT ${CMAKE_HOME_DIRECTORY}/tbb)
+INCLUDE(${TBB_ROOT}/cmake/TBBBuild.cmake)
+tbb_build(TBB_ROOT ${TBB_ROOT} CONFIG_DIR TBB_DIR MAKE_ARGS tbb_cpf=1)
+# FIND_PACKAGE(TBB REQUIRED tbb_preview)
+
+
+
 # Add macros
 INCLUDE(character_sets)
 INCLUDE(cpu_info)
 INCLUDE(zlib)
+# INCLUDE(cityhash)
 INCLUDE(zstd)
 INCLUDE(libevent)
 INCLUDE(ssl)
@@ -728,3 +736,4 @@ IF(NOT CMAKE_GENERATOR MATCHES "Makefiles")
   MESSAGE(STATUS
     "CMAKE_CXX_FLAGS_RELWITHDEBINFO: ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 ENDIF()
+

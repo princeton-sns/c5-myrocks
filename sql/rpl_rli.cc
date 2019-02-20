@@ -185,6 +185,11 @@ Relay_log_info::Relay_log_info(bool is_slave_recovery
   recovery_sid_lock= new Checkable_rwlock;
   recovery_sid_map= new Sid_map(recovery_sid_lock);
 
+  queued_trx_count= 0;
+  executed_trx_count= 0;
+  
+  // dep_key_lookup.max_load_factor(0.8);
+  // dep_key_lookup.reserve(1000000);
   mysql_mutex_init(0, &dep_lock, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(0, &dep_key_lookup_mutex, MY_MUTEX_INIT_FAST);
   mysql_cond_init(0, &dep_full_cond, NULL);
