@@ -3,6 +3,7 @@
 #include "dependency_slave_worker.h"
 #include "log_event_wrapper.h"
 #include "rpl_slave_commit_order_manager.h"
+#include <time.h>
 
 
 bool append_item_to_jobs(slave_job_item *job_item,
@@ -17,24 +18,12 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
 {
   std::shared_ptr<Log_event_wrapper> ret;
 
-  mysql_mutex_lock(&c_rli->dep_lock);
-
-  PSI_stage_info old_stage;
-  info_thd->ENTER_COND(&c_rli->dep_empty_cond, &c_rli->dep_lock,
-                       &stage_slave_waiting_event_from_coordinator,
-                       &old_stage);
-
   while (!info_thd->killed &&
          running_status == RUNNING &&
-         (c_rli->dep_queue.empty()))//  || c_rli->queued_trx_count.load() > 3)) 
+         (ret= c_rli->dequeue_dep()) == nullptr) 
   {
-    ++c_rli->begin_event_waits;
-    ++c_rli->num_workers_waiting;
-    mysql_cond_wait(&c_rli->dep_empty_cond, &c_rli->dep_lock);
-    --c_rli->num_workers_waiting;
+    my_sleep(10);
   }
-
-  ret= c_rli->dequeue_dep();
 
   // case: place ourselves in the commit order queue
   if (ret && co_mngr != NULL)
@@ -44,24 +33,6 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
     co_mngr->register_trx(this);
   }
 
-  // case: signal if queue is now empty
-  if (c_rli->dep_queue.empty())
-    mysql_cond_signal(&c_rli->dep_empty_cond);
-
-  // admission control
-  if (unlikely(c_rli->dep_full))
-  {
-    DBUG_ASSERT(c_rli->dep_queue.size() > 0);
-    // case: signal if dep has space
-    if (c_rli->dep_queue.size() <
-        (opt_mts_dependency_size * opt_mts_dependency_refill_threshold / 100))
-    {
-      c_rli->dep_full= false;
-      mysql_cond_signal(&c_rli->dep_full_cond);
-    }
-  }
-
-  info_thd->EXIT_COND(&old_stage);
   return ret;
 }
 
@@ -99,15 +70,18 @@ bool Dependency_slave_worker::execute_group()
     commit_order_mngr->report_rollback(this);
   }
 
-  mysql_mutex_lock(&c_rli->dep_lock);
+  ulonglong prev_in_flight;
   if (likely(begin_event))
   {
     DBUG_ASSERT(c_rli->num_in_flight_trx > 0);
-    --c_rli->num_in_flight_trx;
+    prev_in_flight= c_rli->num_in_flight_trx.fetch_sub(1);
+    if (prev_in_flight <= 2) 
+    {
+      mysql_mutex_lock(&c_rli->dep_lock);
+      mysql_cond_signal(&c_rli->dep_trx_all_done_cond);
+      mysql_mutex_unlock(&c_rli->dep_lock);
+    }
   }
-  if (c_rli->num_in_flight_trx <= 1)
-    mysql_cond_signal(&c_rli->dep_trx_all_done_cond);
-  mysql_mutex_unlock(&c_rli->dep_lock);
 
   c_rli->executed_trx_count++;
   c_rli->cleanup_group(begin_event);
@@ -174,32 +148,18 @@ Dependency_slave_worker::finalize_event(std::shared_ptr<Log_event_wrapper> &ev)
    *    case, leave it be; the event corresponds to a later transaction.
    */
 
-  //mysql_mutex_lock(&c_rli->dep_key_lookup_mutex);
-  // if (likely(!c_rli->dep_key_lookup.empty()))
-  // {
-    for (const auto& key : ev->keys)
+  /*
+  for (const auto& key : ev->keys)
+  {
+    Relay_log_info::Last_writer_map::accessor ac;    
+    c_rli->dep_key_lookup.find(ac, key); 
+    if (ac->second == ev)
     {
-      Relay_log_info::Last_writer_map::accessor ac;    
-      c_rli->dep_key_lookup.find(ac, key); 
-      if (ac->second == ev)
-      {
-        c_rli->dep_key_lookup.erase(ac);
-      }
-    
-      /*
-      const auto it= c_rli->dep_key_lookup.find(key);
-      DBUG_ASSERT(it != c_rli->dep_key_lookup.end());
-
-      // Case 1. (Case 2 is implicitly handled by doing nothing.) 
-      if (it->second == ev)
-      {
-        c_rli->dep_key_lookup.erase(it);
-      }
-      */
+      c_rli->dep_key_lookup.erase(ac);
     }
-  // }
+  }
+  */
   ev->finalize();
-  //  mysql_mutex_unlock(&c_rli->dep_key_lookup_mutex);
 }
 
 Dependency_slave_worker::Dependency_slave_worker(Relay_log_info *rli

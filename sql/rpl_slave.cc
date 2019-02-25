@@ -6396,7 +6396,6 @@ void slave_stop_workers(Relay_log_info *rli, bool *mts_inited)
 
   if (opt_mts_dependency_replication)
   {
-    mysql_mutex_lock(&rli->dep_lock);
     // figure out if any worker thread is working on a partially scheduled
     // transaction, i.e. if the queue is empty and the SQL thread is maintaning
     // a begin event
@@ -6407,12 +6406,11 @@ void slave_stop_workers(Relay_log_info *rli, bool *mts_inited)
     {
       rli->clear_dep(false);
     }
-    mysql_mutex_unlock(&rli->dep_lock);
     wait_for_dep_workers_to_finish(rli, partial);
     // case: if UNTIL is specified let's clear after waiting for workers
     if (unlikely(rli->until_condition != Relay_log_info::UNTIL_NONE))
     {
-      rli->clear_dep(true);
+      rli->clear_dep(false);
     }
 
     // set all workers as STOP_ACCEPTED, and signal blocked workers

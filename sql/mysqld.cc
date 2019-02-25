@@ -9755,9 +9755,7 @@ static int show_slave_dependency_in_queue(THD *thd, SHOW_VAR *var, char *buff)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
-    mysql_mutex_lock(&active_mi->rli->dep_lock);
-    *((ulonglong *)buff)= active_mi->rli->dep_queue.size();
-    mysql_mutex_unlock(&active_mi->rli->dep_lock);
+    *((ulonglong *)buff)= active_mi->rli->dep_queue.unsafe_size();
   }
   else
     var->type= SHOW_UNDEF;
@@ -9770,9 +9768,7 @@ static int show_slave_dependency_in_flight(THD *thd, SHOW_VAR *var, char *buff)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
-    mysql_mutex_lock(&active_mi->rli->dep_lock);
-    *((ulonglong *)buff)= (ulonglong) active_mi->rli->num_in_flight_trx;
-    mysql_mutex_unlock(&active_mi->rli->dep_lock);
+    *((ulonglong *)buff)= (ulonglong) active_mi->rli->num_in_flight_trx.load();
   }
   else
     var->type= SHOW_UNDEF;

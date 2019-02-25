@@ -1867,21 +1867,14 @@ void wait_for_dep_workers_to_finish(Relay_log_info *rli,
                                     const bool partial_trx)
 {
   DBUG_ASSERT(opt_mts_dependency_replication);
-  PSI_stage_info old_stage;
-
-  mysql_mutex_lock(&rli->dep_lock);
 
   const ulonglong num= partial_trx ? 1 : 0;
-  rli->info_thd->ENTER_COND(&rli->dep_trx_all_done_cond,
-                            &rli->dep_lock,
-                            &stage_slave_waiting_for_dependency_workers,
-                            &old_stage);
-  while (rli->num_in_flight_trx > num && !rli->info_thd->killed)
+  while (rli->num_in_flight_trx.load() > num && !rli->info_thd->killed)
   {
+    mysql_mutex_lock(&rli->dep_lock);
     mysql_cond_wait(&rli->dep_trx_all_done_cond, &rli->dep_lock);
+    mysql_mutex_unlock(&rli->dep_lock);
   }
-
-  rli->info_thd->EXIT_COND(&old_stage);
 }
 
 /**

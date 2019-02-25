@@ -1113,8 +1113,10 @@ public:
 
 #if defined(HAVE_REPLICATION) && !defined(MYSQL_CLIENT)
   /* Related to dependency tracking */
-  std::deque<std::shared_ptr<Log_event_wrapper>> dep_queue;
+  tbb::concurrent_queue<std::shared_ptr<Log_event_wrapper>> dep_queue;
+  // std::deque<std::shared_ptr<Log_event_wrapper>> dep_queue;
   mysql_mutex_t dep_lock;
+
   Log_event_wrapper_queue wrapper_queue;
 
   std::atomic<std::uint64_t> queued_trx_count;
@@ -1149,7 +1151,7 @@ public:
 
   // Mutex-condition pair to notify when queue is/is not empty
   mysql_cond_t dep_empty_cond;
-  ulonglong num_workers_waiting= 0;
+  std::atomic<ulonglong> num_workers_sleeping{0};
 
   std::shared_ptr<Log_event_wrapper> prev_event;
   std::unordered_map<ulonglong, Table_map_log_event *> table_map_events;
@@ -1161,7 +1163,7 @@ public:
   std::atomic<bool> dependency_worker_error{false};
 
   mysql_cond_t dep_trx_all_done_cond;
-  ulonglong num_in_flight_trx= 0;
+  std::atomic<ulonglong> num_in_flight_trx{0};
 
   // Statistics
   std::atomic<ulonglong> begin_event_waits{0};
@@ -1170,18 +1172,17 @@ public:
   bool enqueue_dep(
       const std::shared_ptr<Log_event_wrapper> &begin_event)
   {
-    mysql_mutex_assert_owner(&dep_lock);
-    dep_queue.push_back(begin_event);
+    dep_queue.push(begin_event);
     return true;
   }
 
   std::shared_ptr<Log_event_wrapper> dequeue_dep()
   {
-    mysql_mutex_assert_owner(&dep_lock);
-    if (dep_queue.empty()) { return nullptr; }
-    auto ret= dep_queue.front();
-    dep_queue.pop_front();
-    return ret;
+    std::shared_ptr<Log_event_wrapper> ret;
+    if (dep_queue.try_pop(ret))
+      return ret;
+    else
+      return nullptr;
   }
 
   void cleanup_group(std::shared_ptr<Log_event_wrapper> begin_event)
@@ -1207,15 +1208,16 @@ public:
 
   void clear_dep(bool need_dep_lock= true)
   {
-    if (need_dep_lock)
-      mysql_mutex_lock(&dep_lock);
-
     DBUG_ASSERT(num_in_flight_trx >= dep_queue.size());
-    num_in_flight_trx -= dep_queue.size();
-    for (const auto& begin_event : dep_queue)
-      cleanup_group(begin_event);
-    dep_queue.clear();
 
+    auto begin_event= dequeue_dep();
+    while (begin_event != nullptr) 
+    {
+      cleanup_group(begin_event);
+      num_in_flight_trx.fetch_sub(1);
+      begin_event= dequeue_dep();
+    }
+    
     prev_event.reset();
     current_begin_event.reset();
     table_map_events.clear();
@@ -1223,20 +1225,11 @@ public:
     keys_accessed_by_group.clear();
     dbs_accessed_by_group.clear();
 
-    mysql_cond_broadcast(&dep_empty_cond);
-    mysql_cond_broadcast(&dep_full_cond);
-    mysql_cond_broadcast(&dep_trx_all_done_cond);
-
     dep_full= false;
 
-    mysql_mutex_lock(&dep_key_lookup_mutex);
     dep_key_lookup.clear();
-    mysql_mutex_unlock(&dep_key_lookup_mutex);
 
     trx_queued= false;
-
-    if (need_dep_lock)
-      mysql_mutex_unlock(&dep_lock);
   }
 #endif // HAVE_REPLICATION and !MYSQL_CLIENT
 };

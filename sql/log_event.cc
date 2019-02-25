@@ -3309,7 +3309,8 @@ void Log_event::schedule_dep(Relay_log_info *rli)
       {
         rli->start_time= std::chrono::steady_clock::now();
       }
-      else {
+      else 
+      {
         auto end_time= std::chrono::steady_clock::now();
         std::chrono::duration<double> diff= end_time - rli->start_time;
         fprintf(stderr, "Count: %d. Wakeups: %d. Time: %lf.\n", (int)rli->queued_trx_count.load(), (int)rli->wakeups, diff.count());
@@ -3322,36 +3323,18 @@ void Log_event::schedule_dep(Relay_log_info *rli)
       rli->wakeups+= 1;
     }
 
-    mysql_mutex_lock(&rli->dep_lock);
-
     // wait if queue has reached full capacity
-    while (unlikely(rli->dep_full))
+    while (unlikely(rli->dep_queue.unsafe_size() >= opt_mts_dependency_size))
     {
       fprintf(stderr, "Dep full!\n");
-      mysql_cond_wait(&rli->dep_full_cond, &rli->dep_lock);
+      my_sleep(1);
     }
 
     rli->enqueue_dep(rli->current_begin_event);
-
-    // case: workers are waiting on empty queue, let's signal
-    if (likely(rli->num_workers_waiting > 0))
-    {
-        DBUG_ASSERT(rli->num_workers_waiting <= rli->opt_slave_parallel_workers);
-        mysql_cond_signal(&rli->dep_empty_cond);
-    }
-
     rli->queued_trx_count++;
    
-    // admission control in dep queue
-    if (unlikely(rli->dep_queue.size() >= opt_mts_dependency_size))
-    {
-      rli->dep_full= true;
-    }
-
     ++rli->num_in_flight_trx;
     rli->trx_queued= true;
-
-    mysql_mutex_unlock(&rli->dep_lock);
   }
 
   DBUG_ASSERT(ev->is_begin_event || rli->prev_event);
@@ -3424,9 +3407,9 @@ Log_event::handle_terminal_dep_event(Relay_log_info *rli,
     // populate key->last trx penultimate event in the key lookup
     // NOTE: we store the end event for a single event trx
     auto to_add= rli->prev_event ? rli->prev_event : ev;
-    // mysql_mutex_lock(&rli->dep_key_lookup_mutex);
     if (!to_add->finalized())
     {
+      /*
       for (const auto& key : rli->keys_accessed_by_group)
       {
         Relay_log_info::Last_writer_map::accessor ac;    
@@ -3434,8 +3417,8 @@ Log_event::handle_terminal_dep_event(Relay_log_info *rli,
         ac->second= to_add;
         to_add->keys.insert(key);
       }
+      */
     }
-    // mysql_mutex_unlock(&rli->dep_key_lookup_mutex);
 
     // update rli state
     rli->table_map_events.clear();
@@ -12175,7 +12158,7 @@ void Rows_log_event::prepare_dep(Relay_log_info *rli,
   }
 
   rli->keys_accessed_by_group.insert(m_keylist.begin(), m_keylist.end());
-  // mysql_mutex_lock(&rli->dep_key_lookup_mutex);
+  /*
   for (const auto& k : m_keylist)
   {
     Relay_log_info::Last_writer_map::accessor ac; 
@@ -12185,7 +12168,7 @@ void Rows_log_event::prepare_dep(Relay_log_info *rli,
       last_key_event->add_dependent(ev);
     }
   }
-  // mysql_mutex_unlock(&rli->dep_key_lookup_mutex);
+  */
 
   DBUG_VOID_RETURN;
 }
