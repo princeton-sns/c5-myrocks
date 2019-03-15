@@ -2318,10 +2318,12 @@ static void slave_worker_update_statistics(Slave_worker *worker,
 
   }
 
+  /* 
   if (ev && ev->worker)
   {
     delete ev;
   }
+  */
 }
 
 /*

@@ -896,7 +896,7 @@ int my_b_event_read(IO_CACHE* file, uchar *buf, int buflen)
 #ifndef MYSQL_CLIENT
 #ifdef HAVE_REPLICATION
 void Log_event::prepare_dep(Relay_log_info *rli,
-                            std::shared_ptr<Log_event_wrapper> &ev)
+                            Log_event_wrapper *ev)
 {
   DBUG_ENTER("Log_event::prepare_dep");
 
@@ -3240,7 +3240,7 @@ void Log_event::schedule_dep(Relay_log_info *rli)
 {
   DBUG_ENTER("Log_event::schedule_dep");
 
-  auto ev= std::make_shared<Log_event_wrapper>(this, rli->current_begin_event);
+  auto ev= new Log_event_wrapper(this, rli->current_begin_event);
   prepare_dep(rli, ev);
 
   if (starts_group())
@@ -3332,6 +3332,12 @@ void Log_event::schedule_dep(Relay_log_info *rli)
 
     rli->enqueue_dep(rli->current_begin_event);
     rli->queued_trx_count++;
+
+    Log_event_wrapper *temp;
+    if (rli->done_queue.try_pop(temp))
+    {
+      rli->cleanup_group(temp);
+    }
    
     ++rli->num_in_flight_trx;
     rli->trx_queued= true;
@@ -3345,8 +3351,8 @@ void Log_event::schedule_dep(Relay_log_info *rli)
 
   if (unlikely(ev->is_end_event))
   {
-    rli->prev_event= nullptr;
-    rli->current_begin_event.reset();
+    rli->prev_event= NULL;
+    rli->current_begin_event= NULL;
     rli->trx_queued= false;
   }
   else
@@ -3369,7 +3375,7 @@ void Log_event::schedule_dep(Relay_log_info *rli)
 */
 void
 Log_event::handle_terminal_dep_event(Relay_log_info *rli,
-                                     std::shared_ptr<Log_event_wrapper> &ev)
+                                     Log_event_wrapper *ev)
 {
   if (ev->is_begin_event)
   {
@@ -3409,7 +3415,6 @@ Log_event::handle_terminal_dep_event(Relay_log_info *rli,
     auto to_add= rli->prev_event ? rli->prev_event : ev;
     if (!to_add->finalized())
     {
-      /*
       for (const auto& key : rli->keys_accessed_by_group)
       {
         Relay_log_info::Last_writer_map::accessor ac;    
@@ -3417,7 +3422,6 @@ Log_event::handle_terminal_dep_event(Relay_log_info *rli,
         ac->second= to_add;
         to_add->keys.insert(key);
       }
-      */
     }
 
     // update rli state
@@ -5175,7 +5179,7 @@ void Query_log_event::detach_temp_tables_worker(THD *thd)
 }
 
 void Query_log_event::prepare_dep(Relay_log_info *rli,
-                                  std::shared_ptr<Log_event_wrapper> &ev)
+                                  Log_event_wrapper *ev)
 {
   DBUG_ENTER("Query_log_event::prepare_dep");
 
@@ -8117,7 +8121,7 @@ bool Xid_log_event::do_commit(THD *thd)
 }
 
 void Xid_log_event::prepare_dep(Relay_log_info *rli,
-                                std::shared_ptr<Log_event_wrapper> &ev)
+                                Log_event_wrapper *ev)
 {
   DBUG_ENTER("Xid_log_event::prepare_dep");
 
@@ -11916,7 +11920,7 @@ void key_dealloc_cb(uchar *key_buf)
 }
 
 bool Rows_log_event::parse_keys(Relay_log_info* rli,
-                                std::shared_ptr<Log_event_wrapper> &ev,
+                                Log_event_wrapper *ev,
                                 TABLE *table,
                                 std::deque<Dependency_key>& keys)
 {
@@ -12030,7 +12034,7 @@ bool Rows_log_event::parse_keys(Relay_log_info* rli,
   Returns the set of keys written by the statement as a deque.
 */
 bool Rows_log_event::get_keys(Relay_log_info *rli,
-                              std::shared_ptr<Log_event_wrapper> &ev,
+                              Log_event_wrapper *ev,
                               std::deque<Dependency_key> &keys)
 {
   DBUG_ENTER("Rows_log_event::get_keys");
@@ -12129,7 +12133,7 @@ void Rows_log_event::close_table_ref(THD *thd, RPL_TABLE_LIST *table_list)
 }
 
 void Rows_log_event::prepare_dep(Relay_log_info *rli,
-                                 std::shared_ptr<Log_event_wrapper> &ev)
+                                 Log_event_wrapper *ev)
 {
   DBUG_ENTER("Rows_log_event::prepare_dep");
 
@@ -12158,7 +12162,6 @@ void Rows_log_event::prepare_dep(Relay_log_info *rli,
   }
 
   rli->keys_accessed_by_group.insert(m_keylist.begin(), m_keylist.end());
-  /*
   for (const auto& k : m_keylist)
   {
     Relay_log_info::Last_writer_map::accessor ac; 
@@ -12168,7 +12171,6 @@ void Rows_log_event::prepare_dep(Relay_log_info *rli,
       last_key_event->add_dependent(ev);
     }
   }
-  */
 
   DBUG_VOID_RETURN;
 }
@@ -15332,7 +15334,7 @@ bool Gtid_log_event::write_data_header(IO_CACHE *file)
 
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
 void Gtid_log_event::prepare_dep(Relay_log_info *rli,
-                                 std::shared_ptr<Log_event_wrapper> &ev)
+                                 Log_event_wrapper *ev)
 {
   DBUG_ENTER("Gtid_log_event::prepare_dep");
   DBUG_ASSERT(ev->begin_event() == NULL);

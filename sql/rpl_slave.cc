@@ -6946,7 +6946,7 @@ llstr(rli->get_group_master_log_pos(), llbuff));
   thd->reset_query();
   thd->reset_db(NULL, 0);
 
-  DBUG_ASSERT(rli->num_workers_waiting == 0 && rli->num_in_flight_trx == 0);
+  DBUG_ASSERT(rli->num_workers_waiting.load() == 0 && rli->num_in_flight_trx == 0);
 
   THD_STAGE_INFO(thd, stage_waiting_for_slave_mutex_on_exit);
   mysql_mutex_lock(&rli->run_lock);

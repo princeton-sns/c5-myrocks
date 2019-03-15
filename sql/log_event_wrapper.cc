@@ -2,15 +2,18 @@
 #include "rpl_rli_pdb.h"
 #include "log_event_wrapper.h"
 
-void Log_event_wrapper::put_next(std::shared_ptr<Log_event_wrapper> &ev)
+void Log_event_wrapper::put_next(Log_event_wrapper *ev)
 {
+  next_ev.store(ev);
+  /*
   mysql_mutex_lock(&mutex);
   DBUG_ASSERT(!next_ev &&
-              (ev->begin_event() == begin_ev.lock() ||
+              (ev->begin_event() == begin_ev ||
                is_begin_event));
   next_ev= ev;
   mysql_cond_signal(&next_event_cond);
   mysql_mutex_unlock(&mutex);
+  */
 }
 
 bool Log_event_wrapper::wait(Slave_worker *worker)
@@ -33,11 +36,17 @@ bool Log_event_wrapper::wait(Slave_worker *worker)
   return !info_thd->killed && worker->running_status == Slave_worker::RUNNING;
 }
 
-std::shared_ptr<Log_event_wrapper> Log_event_wrapper::next()
+Log_event_wrapper* Log_event_wrapper::next()
 {
   if (unlikely(is_end_event))
     return nullptr;
 
+  Log_event_wrapper *ret;
+  while ((ret= next_ev.load()) == NULL)
+    ;
+  return ret;
+
+  /*
   mysql_mutex_lock(&mutex);
   auto worker= static_cast<Slave_worker*>(raw_ev->worker);
   DBUG_ASSERT(worker);
@@ -54,16 +63,17 @@ std::shared_ptr<Log_event_wrapper> Log_event_wrapper::next()
   }
   info_thd->EXIT_COND(&old_stage);
   return next_ev;
+  */
 }
 
 bool Log_event_wrapper::path_exists(
-    const std::shared_ptr<Log_event_wrapper> &ev) const
+    const Log_event_wrapper *ev) const
 {
-  auto tmp= next_ev;
+  auto tmp= next_ev.load();
   while (tmp)
   {
     if (tmp == ev) { return true; }
-    tmp= tmp->next_ev;
+    tmp= tmp->next_ev.load();
   }
   return false;
 }

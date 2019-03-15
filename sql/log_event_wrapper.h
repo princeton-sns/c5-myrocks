@@ -10,14 +10,14 @@ int slave_worker_exec_job(Slave_worker *worker, Relay_log_info *rli);
   */
 class Log_event_wrapper
 {
-  friend class Log_event_wrapper_queue;
-
+public:
   Log_event *raw_ev;
-  std::shared_ptr<Log_event_wrapper>   queue_next= nullptr;
-  std::weak_ptr<Log_event_wrapper>     begin_ev;
+
+private:
+  Log_event_wrapper                    *begin_ev;
 
   // events that depend on us
-  std::vector<std::shared_ptr<Log_event_wrapper>> dependents;
+  std::vector<Log_event_wrapper*> dependents;
   // number of events that we depend on
   ulonglong dependencies= 0;
 
@@ -34,7 +34,7 @@ class Log_event_wrapper
   std::string db;
 
 public:
-  std::shared_ptr<Log_event_wrapper> next_ev;
+  std::atomic<Log_event_wrapper*> next_ev{NULL};
 
   // keys touched by this event, it should not be empty for rows event
   std::unordered_set<Dependency_key> keys;
@@ -49,7 +49,7 @@ public:
   std::atomic_bool whole_group_scheduled{false};
 
   Log_event_wrapper(Log_event *raw_ev,
-                    std::shared_ptr<Log_event_wrapper> &begin_ev) :
+                    Log_event_wrapper *begin_ev) :
     raw_ev(raw_ev), begin_ev(begin_ev)
   {
     mysql_mutex_init(0, &mutex, MY_MUTEX_INIT_FAST);
@@ -76,13 +76,13 @@ public:
 
   Log_event* raw_event() const { return raw_ev; }
 
-  std::shared_ptr<Log_event_wrapper>
-  begin_event() const { return begin_ev.lock(); }
+  Log_event_wrapper*
+  begin_event() const { return begin_ev; }
 
-  void add_dependent(std::shared_ptr<Log_event_wrapper> &ev)
+  void add_dependent(Log_event_wrapper *ev)
   {
     mysql_mutex_lock(&mutex);
-    DBUG_ASSERT(!is_finalized && ev.get() != this && ev->raw_ev && raw_ev);
+    DBUG_ASSERT(!is_finalized && ev != this && ev->raw_ev && raw_ev);
     dependents.push_back(ev);
     ev->incr_dependency();
     mysql_mutex_unlock(&mutex);
@@ -132,9 +132,9 @@ public:
     return slave_worker_exec_job(w, rli);
   }
 
-  void put_next(std::shared_ptr<Log_event_wrapper> &ev);
-  std::shared_ptr<Log_event_wrapper> next();
-  bool path_exists(const std::shared_ptr<Log_event_wrapper> &ev) const;
+  void put_next(Log_event_wrapper *ev);
+  Log_event_wrapper* next();
+  bool path_exists(const Log_event_wrapper *ev) const;
 
   void set_db(const std::string& db)
   {
@@ -146,82 +146,5 @@ public:
     return db;
   }
 };
-
-class Log_event_wrapper_queue 
-{
-  std::shared_ptr<Log_event_wrapper>     head= nullptr;
-  std::shared_ptr<Log_event_wrapper>     tail= nullptr;
-  size_t                                 queue_size= 0;
-
-public:
-  Log_event_wrapper_queue()
-  {
-  }
-
-  size_t size()
-  {
-    return queue_size;
-  }
-
-  std::shared_ptr<Log_event_wrapper> get_iterator()
-  {
-    return head;
-  }
-
-  std::shared_ptr<Log_event_wrapper> next(std::shared_ptr<Log_event_wrapper> ev)
-  {
-    return ev->queue_next;
-  }
-
-  void enqueue(std::shared_ptr<Log_event_wrapper> ev)
-  {
-    DBUG_ASSERT(head != nullptr || tail == nullptr );
-    
-    ev->queue_next= nullptr;
-    if (tail == nullptr) 
-      head= ev;
-    else 
-      tail->queue_next= ev;
-
-    tail= ev;
-    ++queue_size;
-  }
-
-  std::shared_ptr<Log_event_wrapper> dequeue()
-  {
-    DBUG_ASSERT(head != nullptr || tail == nullptr );
-
-    auto ret= head;
-    head= ret->queue_next;
-    if (tail == ret)
-    {
-       tail= head; 
-    }
-    ret->queue_next= nullptr;
-    --queue_size;
-    return ret;
-  }
-
-  void clear()
-  {
-    auto it= head;
-    while (it != nullptr) 
-    {
-      auto prev= it;
-      it= it->queue_next;
-      prev->queue_next= nullptr;
-    }
-    head= nullptr;
-    tail= nullptr;
-    queue_size= 0;
-  }
-
-  bool empty() 
-  {
-    return head == nullptr;
-  }
-};
-
-
 
 #endif // LOG_EVENT_WRAPPER_H

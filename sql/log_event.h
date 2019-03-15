@@ -1620,13 +1620,13 @@ private:
      @see Log_event::schedule_dep
   */
   void handle_terminal_dep_event(Relay_log_info *rli,
-                                 std::shared_ptr<Log_event_wrapper> &ev);
+                                 Log_event_wrapper *ev);
 
   /**
      Called by @schedule_dep to prepare a dependency event
   */
   virtual void prepare_dep(Relay_log_info *rli,
-                           std::shared_ptr<Log_event_wrapper> &ev);
+                           Log_event_wrapper *ev);
 
 public:
 
@@ -2363,7 +2363,7 @@ public:        /* !!! Public in this patch to allow old usage */
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
   virtual enum_skip_reason do_shall_skip(Relay_log_info *rli);
   virtual void prepare_dep(Relay_log_info *rli,
-                           std::shared_ptr<Log_event_wrapper> &ev);
+                           Log_event_wrapper *ev);
   virtual int do_apply_event(Relay_log_info const *rli);
   virtual int do_update_pos(Relay_log_info *rli);
 
@@ -3097,7 +3097,7 @@ class Xid_log_event: public Log_event
 private:
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
   virtual void prepare_dep(Relay_log_info *rli,
-                           std::shared_ptr<Log_event_wrapper> &ev);
+                           Log_event_wrapper *ev);
   virtual int do_apply_event(Relay_log_info const *rli);
   virtual int do_apply_event_worker(Slave_worker *rli);
   enum_skip_reason do_shall_skip(Relay_log_info *rli);
@@ -4533,11 +4533,11 @@ private:
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
 public:
   bool get_keys(Relay_log_info *rli,
-                std::shared_ptr<Log_event_wrapper> &ev,
+                Log_event_wrapper *ev,
                 std::deque<Dependency_key> &keys);
 protected:
   bool parse_keys(Relay_log_info* rli,
-                  std::shared_ptr<Log_event_wrapper> &ev,
+                  Log_event_wrapper *ev,
                   TABLE *table,
                   std::deque<Dependency_key>& keys);
 
@@ -4546,7 +4546,7 @@ private:
                      RPL_TABLE_LIST **table_list);
   void close_table_ref(THD *thd, RPL_TABLE_LIST *table_list);
   virtual void prepare_dep(Relay_log_info *rli,
-                           std::shared_ptr<Log_event_wrapper> &ev);
+                           Log_event_wrapper *ev);
   virtual int do_apply_event(Relay_log_info const *rli);
   virtual int do_update_pos(Relay_log_info *rli);
   virtual enum_skip_reason do_shall_skip(Relay_log_info *rli);
@@ -5297,7 +5297,7 @@ public:
 
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
   void prepare_dep(Relay_log_info *rli,
-                   std::shared_ptr<Log_event_wrapper> &ev);
+                   Log_event_wrapper *ev);
   int do_apply_event(Relay_log_info const *rli);
   int do_update_pos(Relay_log_info *rli);
   void set_last_gtid(char *last_gtid);

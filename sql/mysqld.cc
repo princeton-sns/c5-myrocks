@@ -9749,6 +9749,21 @@ static int show_slave_running(THD *thd, SHOW_VAR *var, char *buff)
   return 0;
 }
 
+static int show_slave_producer_scheduled(THD *thd, SHOW_VAR *var, char *buff)
+{
+  if (opt_mts_dependency_replication && active_mi && active_mi->rli)
+  {
+    var->type= SHOW_LONGLONG;
+    var->value= buff;
+    *((ulonglong *)buff)= active_mi->rli->queued_trx_count.load();
+  }
+  else
+    var->type= SHOW_UNDEF;
+  return 0;
+}
+
+
+
 static int show_slave_dependency_in_queue(THD *thd, SHOW_VAR *var, char *buff)
 {
   if (opt_mts_dependency_replication && active_mi && active_mi->rli)
@@ -10563,6 +10578,7 @@ SHOW_VAR status_vars[]= {
   {"Slave_dependency_in_flight", (char*) &show_slave_dependency_in_flight, SHOW_FUNC},
   {"Slave_dependency_begin_waits", (char*) &show_slave_dependency_begin_waits, SHOW_FUNC},
   {"Slave_dependency_next_waits", (char*) &show_slave_dependency_next_waits, SHOW_FUNC},
+  {"Slave_producer_scheduled", (char*) &show_slave_producer_scheduled, SHOW_FUNC},
 #endif
   {"Slow_launch_threads",      (char*) &slow_launch_threads,    SHOW_LONG},
   {"Slow_queries",             (char*) offsetof(STATUS_VAR, long_query_count), SHOW_LONGLONG_STATUS},

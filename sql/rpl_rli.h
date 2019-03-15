@@ -1113,11 +1113,11 @@ public:
 
 #if defined(HAVE_REPLICATION) && !defined(MYSQL_CLIENT)
   /* Related to dependency tracking */
-  tbb::concurrent_queue<std::shared_ptr<Log_event_wrapper>> dep_queue;
+  tbb::concurrent_queue<Log_event_wrapper*> dep_queue;
+  tbb::concurrent_queue<ulonglong> int_queue;
+  tbb::concurrent_queue<Log_event_wrapper*> done_queue;
   // std::deque<std::shared_ptr<Log_event_wrapper>> dep_queue;
   mysql_mutex_t dep_lock;
-
-  Log_event_wrapper_queue wrapper_queue;
 
   std::atomic<std::uint64_t> queued_trx_count;
   std::atomic<std::uint64_t> executed_trx_count; 
@@ -1130,12 +1130,8 @@ public:
 
   /* Mapping from key to penultimate (for multi event trx)/end event of the
      last trx that updated that table */
-  /*
-  std::unordered_map<Dependency_key, std::shared_ptr<Log_event_wrapper>>
-                                            dep_key_lookup;
-  */                                          
   mysql_mutex_t dep_key_lookup_mutex;
-  typedef tbb::concurrent_hash_map<Dependency_key, std::shared_ptr<Log_event_wrapper>, 
+  typedef tbb::concurrent_hash_map<Dependency_key, Log_event_wrapper*, 
                                    Dependency_key> Last_writer_map; 
   Last_writer_map dep_key_lookup;
 
@@ -1151,11 +1147,11 @@ public:
 
   // Mutex-condition pair to notify when queue is/is not empty
   mysql_cond_t dep_empty_cond;
-  std::atomic<ulonglong> num_workers_sleeping{0};
+  std::atomic<ulonglong> num_workers_waiting{0};
 
-  std::shared_ptr<Log_event_wrapper> prev_event;
+  Log_event_wrapper *prev_event;
   std::unordered_map<ulonglong, Table_map_log_event *> table_map_events;
-  std::shared_ptr<Log_event_wrapper> current_begin_event;
+  Log_event_wrapper *current_begin_event;
   bool trx_queued= false;
   bool dep_sync_group= false;
 
@@ -1170,25 +1166,34 @@ public:
   std::atomic<ulonglong> next_event_waits{0};
 
   bool enqueue_dep(
-      const std::shared_ptr<Log_event_wrapper> &begin_event)
+      Log_event_wrapper *begin_event)
   {
     dep_queue.push(begin_event);
     return true;
   }
 
-  std::shared_ptr<Log_event_wrapper> dequeue_dep()
+  Log_event_wrapper* dequeue_dep()
   {
-    std::shared_ptr<Log_event_wrapper> ret;
+    Log_event_wrapper* ret;
     if (dep_queue.try_pop(ret))
       return ret;
     else
-      return nullptr;
+      return NULL;
   }
 
-  void cleanup_group(std::shared_ptr<Log_event_wrapper> begin_event)
+  void cleanup_group(Log_event_wrapper *begin_event)
   {
     // Delete all events manually in bottom-up manner to avoid stack overflow
     // from cascading shared_ptr deletions
+    auto it= begin_event;
+    while (it != NULL) 
+    {
+      auto to_del= it;
+      it= (Log_event_wrapper*)(it->next_ev.load());
+      delete(to_del);
+    }
+
+    /*
     std::stack<std::weak_ptr<Log_event_wrapper>> events;
     auto& event= begin_event;
     while (event)
@@ -1204,11 +1209,12 @@ public:
         sptr->next_ev.reset();
       events.pop();
     }
+    */
   }
 
   void clear_dep(bool need_dep_lock= true)
   {
-    DBUG_ASSERT(num_in_flight_trx >= dep_queue.size());
+    DBUG_ASSERT(num_in_flight_trx >= dep_queue.unsafe_size());
 
     auto begin_event= dequeue_dep();
     while (begin_event != nullptr) 
@@ -1218,8 +1224,8 @@ public:
       begin_event= dequeue_dep();
     }
     
-    prev_event.reset();
-    current_begin_event.reset();
+    prev_event= NULL;
+    current_begin_event= NULL;
     table_map_events.clear();
 
     keys_accessed_by_group.clear();

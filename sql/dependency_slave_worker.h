@@ -9,11 +9,12 @@ class Commit_order_manager;
 
 class Dependency_slave_worker : public Slave_worker
 {
-  std::shared_ptr<Log_event_wrapper>
+  Log_event_wrapper* 
     get_begin_event(Commit_order_manager *co_mngr);
   bool execute_group();
-  int execute_event(std::shared_ptr<Log_event_wrapper> &ev);
-  void finalize_event(std::shared_ptr<Log_event_wrapper> &ev);
+  bool fake_execute_group(Log_event_wrapper *ev);
+  int execute_event(Log_event_wrapper *ev);
+  void finalize_event(Log_event_wrapper *ev);
 
 public:
   Dependency_slave_worker(Relay_log_info *rli

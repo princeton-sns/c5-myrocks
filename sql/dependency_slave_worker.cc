@@ -9,20 +9,20 @@
 bool append_item_to_jobs(slave_job_item *job_item,
                          Slave_worker *w,
                          Relay_log_info *rli);
+
 void clear_current_group_events(Slave_worker *worker,
                                 Relay_log_info *rli,
                                 bool overfill);
 
-std::shared_ptr<Log_event_wrapper>
+Log_event_wrapper*
 Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
 {
-  std::shared_ptr<Log_event_wrapper> ret;
-
+  Log_event_wrapper* ret= NULL;
   while (!info_thd->killed &&
          running_status == RUNNING &&
-         (ret= c_rli->dequeue_dep()) == nullptr) 
+         (ret= c_rli->dequeue_dep()) == NULL) 
   {
-    my_sleep(10);
+    my_sleep(1);
   }
 
   // case: place ourselves in the commit order queue
@@ -36,15 +36,11 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
   return ret;
 }
 
-// Pulls and executes events single group
-// Returns true if the group executed successfully
-bool Dependency_slave_worker::execute_group()
+bool Dependency_slave_worker::fake_execute_group(Log_event_wrapper *begin_event)
 {
   int err= 0;
   Commit_order_manager *commit_order_mngr= get_commit_order_manager();
 
-  DBUG_ASSERT(current_event_index == 0);
-  auto begin_event= get_begin_event(commit_order_mngr);
   auto ev= begin_event;
 
   while (ev)
@@ -54,6 +50,7 @@ bool Dependency_slave_worker::execute_group()
       c_rli->dependency_worker_error= true;
       break;
     }
+
     // case: restart trx if temporary error, see @slave_worker_ends_group
     if (unlikely(trans_retries && current_event_index == 0))
     {
@@ -64,9 +61,26 @@ bool Dependency_slave_worker::execute_group()
     ev= ev->next();
   }
 
+  /*
+  auto start_time= std::chrono::high_resolution_clock::now();
+  auto end_time= start_time;
+  while (true)
+  {
+    if (std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count() > 50)
+    {
+      break;
+    }
+    else 
+    {
+      end_time= std::chrono::high_resolution_clock::now();
+    }
+  }
+  */
+
   // case: in case of error rollback if commit ordering is enabled
   if (unlikely(err && commit_order_mngr))
   {
+    assert(false);
     commit_order_mngr->report_rollback(this);
   }
 
@@ -84,17 +98,82 @@ bool Dependency_slave_worker::execute_group()
   }
 
   c_rli->executed_trx_count++;
+  c_rli->done_queue.push(begin_event);
+  // c_rli->cleanup_group(begin_event);
+
+  return true;
+}
+
+// Pulls and executes events single group
+// Returns true if the group executed successfully
+bool Dependency_slave_worker::execute_group()
+{
+  
+  int err= 0;
+  Commit_order_manager *commit_order_mngr= get_commit_order_manager();
+
+  DBUG_ASSERT(current_event_index == 0);
+  auto begin_event= get_begin_event(commit_order_mngr);
+  if (c_rli->queued_trx_count.load() > 3)
+  {
+    return fake_execute_group(begin_event);
+  }
+
+  auto ev= begin_event;
+
+  while (ev)
+  {
+    if (unlikely(err= execute_event(ev)))
+    {
+      c_rli->dependency_worker_error= true;
+      break;
+    }
+
+    // case: restart trx if temporary error, see @slave_worker_ends_group
+    if (unlikely(trans_retries && current_event_index == 0))
+    {
+      ev= begin_event;
+      continue;
+    }
+    finalize_event(ev);
+    ev= ev->next();
+  }
+
+  // case: in case of error rollback if commit ordering is enabled
+  if (unlikely(err && commit_order_mngr))
+  {
+    assert(false);
+    commit_order_mngr->report_rollback(this);
+  }
+
+  ulonglong prev_in_flight;
+  if (likely(begin_event))
+  {
+    DBUG_ASSERT(c_rli->num_in_flight_trx > 0);
+    prev_in_flight= c_rli->num_in_flight_trx.fetch_sub(1);
+    if (prev_in_flight <= 2) 
+    {
+      mysql_mutex_lock(&c_rli->dep_lock);
+      mysql_cond_signal(&c_rli->dep_trx_all_done_cond);
+      mysql_mutex_unlock(&c_rli->dep_lock);
+    }
+  }
+
+  c_rli->executed_trx_count++;
+  // c_rli->done_queue.push(begin_event);
   c_rli->cleanup_group(begin_event);
 
   return err == 0 && !info_thd->killed && running_status == RUNNING;
 }
 
 int
-Dependency_slave_worker::execute_event(std::shared_ptr<Log_event_wrapper> &ev)
+Dependency_slave_worker::execute_event(Log_event_wrapper *ev)
 {
   // wait for all dependencies to be satisfied
   if (unlikely(!ev->wait(this)))
+  {
     return 1;
+  }
 
   DBUG_EXECUTE_IF("dbug.dep_wait_before_update_execution",
     {
@@ -130,14 +209,14 @@ Dependency_slave_worker::execute_event(std::shared_ptr<Log_event_wrapper> &ev)
     // easier
     Slave_job_item item= { ev->raw_event() };
     if (append_item_to_jobs(&item, this, c_rli)) return 1;
-    ev->is_appended_to_queue= true;
+    // ev->is_appended_to_queue= true;
   }
-  DBUG_ASSERT(ev->is_appended_to_queue);
+  // DBUG_ASSERT(ev->is_appended_to_queue);
   return ev->execute(this, this->info_thd, c_rli) == 0 ? 0 : -1;
 }
 
 void
-Dependency_slave_worker::finalize_event(std::shared_ptr<Log_event_wrapper> &ev)
+Dependency_slave_worker::finalize_event(Log_event_wrapper *ev)
 {
   /* Attempt to clean up entries from the key lookup
    *
@@ -148,7 +227,6 @@ Dependency_slave_worker::finalize_event(std::shared_ptr<Log_event_wrapper> &ev)
    *    case, leave it be; the event corresponds to a later transaction.
    */
 
-  /*
   for (const auto& key : ev->keys)
   {
     Relay_log_info::Last_writer_map::accessor ac;    
@@ -158,7 +236,6 @@ Dependency_slave_worker::finalize_event(std::shared_ptr<Log_event_wrapper> &ev)
       c_rli->dep_key_lookup.erase(ac);
     }
   }
-  */
   ev->finalize();
 }
 
