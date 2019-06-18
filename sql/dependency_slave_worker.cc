@@ -36,89 +36,24 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
   return ret;
 }
 
-bool Dependency_slave_worker::fake_execute_group(Log_event_wrapper *begin_event)
-{
-  int err= 0;
-  Commit_order_manager *commit_order_mngr= get_commit_order_manager();
-
-  auto ev= begin_event;
-
-  while (ev)
-  {
-    if (unlikely(err= execute_event(ev)))
-    {
-      c_rli->dependency_worker_error= true;
-      break;
-    }
-
-    // case: restart trx if temporary error, see @slave_worker_ends_group
-    if (unlikely(trans_retries && current_event_index == 0))
-    {
-      ev= begin_event;
-      continue;
-    }
-    finalize_event(ev);
-    ev= ev->next();
-  }
-
-  /*
-  auto start_time= std::chrono::high_resolution_clock::now();
-  auto end_time= start_time;
-  while (true)
-  {
-    if (std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count() > 50)
-    {
-      break;
-    }
-    else 
-    {
-      end_time= std::chrono::high_resolution_clock::now();
-    }
-  }
-  */
-
-  // case: in case of error rollback if commit ordering is enabled
-  if (unlikely(err && commit_order_mngr))
-  {
-    assert(false);
-    commit_order_mngr->report_rollback(this);
-  }
-
-  ulonglong prev_in_flight;
-  if (likely(begin_event))
-  {
-    DBUG_ASSERT(c_rli->num_in_flight_trx > 0);
-    prev_in_flight= c_rli->num_in_flight_trx.fetch_sub(1);
-    if (prev_in_flight <= 2) 
-    {
-      mysql_mutex_lock(&c_rli->dep_lock);
-      mysql_cond_signal(&c_rli->dep_trx_all_done_cond);
-      mysql_mutex_unlock(&c_rli->dep_lock);
-    }
-  }
-
-  c_rli->executed_trx_count++;
-  c_rli->done_queue.push(begin_event);
-  // c_rli->cleanup_group(begin_event);
-
-  return true;
-}
-
 // Pulls and executes events single group
 // Returns true if the group executed successfully
 bool Dependency_slave_worker::execute_group()
 {
-  
+  /*
+  while (true) {
+    if (c_rli->queued_trx_count.load() > 600000)
+    {
+      break;
+    }
+  }
+  */
+
   int err= 0;
   Commit_order_manager *commit_order_mngr= get_commit_order_manager();
 
   DBUG_ASSERT(current_event_index == 0);
   auto begin_event= get_begin_event(commit_order_mngr);
-  if (c_rli->queued_trx_count.load() > 3)
-  {
-    return fake_execute_group(begin_event);
-  }
-
   auto ev= begin_event;
 
   while (ev)
@@ -142,7 +77,6 @@ bool Dependency_slave_worker::execute_group()
   // case: in case of error rollback if commit ordering is enabled
   if (unlikely(err && commit_order_mngr))
   {
-    assert(false);
     commit_order_mngr->report_rollback(this);
   }
 
@@ -161,7 +95,7 @@ bool Dependency_slave_worker::execute_group()
 
   c_rli->executed_trx_count++;
   // c_rli->done_queue.push(begin_event);
-  c_rli->cleanup_group(begin_event);
+  // c_rli->cleanup_group(begin_event);
 
   return err == 0 && !info_thd->killed && running_status == RUNNING;
 }

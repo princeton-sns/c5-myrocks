@@ -3303,7 +3303,7 @@ void Log_event::schedule_dep(Relay_log_info *rli)
   if (!rli->trx_queued &&
       (rli->dep_sync_group || !rli->current_begin_event->get_db().empty()))
   {
-    if (unlikely(rli->queued_trx_count.load() % 50000 == 0))
+    if (unlikely(rli->queued_trx_count.load() % 5000 == 0))
     {
       if (rli->queued_trx_count.load() == 0) 
       {
@@ -3333,11 +3333,13 @@ void Log_event::schedule_dep(Relay_log_info *rli)
     rli->enqueue_dep(rli->current_begin_event);
     rli->queued_trx_count++;
 
+    /*
     Log_event_wrapper *temp;
     if (rli->done_queue.try_pop(temp))
     {
       rli->cleanup_group(temp);
     }
+    */
    
     ++rli->num_in_flight_trx;
     rli->trx_queued= true;
@@ -3412,7 +3414,8 @@ Log_event::handle_terminal_dep_event(Relay_log_info *rli,
   {
     // populate key->last trx penultimate event in the key lookup
     // NOTE: we store the end event for a single event trx
-    auto to_add= rli->prev_event ? rli->prev_event : ev;
+    // auto to_add= rli->prev_event ? rli->prev_event : ev;
+    auto to_add= ev;
     if (!to_add->finalized())
     {
       for (const auto& key : rli->keys_accessed_by_group)
@@ -3428,6 +3431,7 @@ Log_event::handle_terminal_dep_event(Relay_log_info *rli,
     rli->table_map_events.clear();
     rli->dbs_accessed_by_group.clear();
     rli->keys_accessed_by_group.clear();
+    rli->keys_group_event.clear();
 
     rli->mts_group_status= Relay_log_info::MTS_END_GROUP;
     rli->curr_group_seen_begin = rli->curr_group_seen_gtid = false;
@@ -3671,6 +3675,8 @@ int Log_event::apply_event(Relay_log_info *rli)
         /*
           Marking sure the event will be executed in sequential mode.
         */
+
+        /* XXX Start:Jose Remove this commented out block!
         if (wait_for_workers_to_finish(rli) == -1)
         {
           // handle synchronization error
@@ -3680,6 +3686,8 @@ int Log_event::apply_event(Relay_log_info *rli)
                       "execution.");
           DBUG_RETURN(-1);
         }
+        End:Jose */
+
         /*
           Given not in-group mark the event handler can invoke checkpoint
           update routine in the following course.
@@ -11950,7 +11958,9 @@ bool Rows_log_event::parse_keys(Relay_log_info* rli,
 
   // Case: We cannot function without a PK, abort!
   if (!found_pk)
+  {
     DBUG_RETURN(false);
+  }
 
   uchar *curr_row= NULL, *key_buf= NULL, *curr_row_end= NULL;
   uint i= 0;
@@ -12071,6 +12081,10 @@ bool Rows_log_event::get_keys(Relay_log_info *rli,
     success= parse_keys(rli, ev, table_list->table, keys);
     rli->tables_to_lock= NULL;
   }
+  else
+  {
+    assert(false);
+  }
 
   DBUG_ASSERT(memory != NULL);
   DBUG_ASSERT(table_list->m_tabledef_valid);
@@ -12139,6 +12153,9 @@ void Rows_log_event::prepare_dep(Relay_log_info *rli,
 
   DBUG_ASSERT(rli->prev_event != NULL);
   DBUG_ASSERT(rli->table_map_events.count(get_table_id()));
+
+  assert(rli->prev_event != NULL);
+  assert(rli->table_map_events.count(get_table_id()));
 
   const auto tbe= rli->table_map_events.at(get_table_id());
 

@@ -2249,10 +2249,10 @@ static void slave_worker_update_statistics(Slave_worker *worker,
   mysql_mutex_assert_owner(&worker->jobs_lock);
 
   struct slave_job_item item= {NULL}, *job_item= &item;
-  Log_event *ev= NULL;
+  //Log_event *ev= NULL;
 
   de_queue(&worker->jobs, job_item);
-  ev= static_cast<Log_event*>(job_item->data);
+  //ev= static_cast<Log_event*>(job_item->data);
 
   /* possible overfill */
   if (worker->jobs.len == worker->jobs.size - 1

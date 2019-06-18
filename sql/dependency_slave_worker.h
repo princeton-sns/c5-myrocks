@@ -12,7 +12,6 @@ class Dependency_slave_worker : public Slave_worker
   Log_event_wrapper* 
     get_begin_event(Commit_order_manager *co_mngr);
   bool execute_group();
-  bool fake_execute_group(Log_event_wrapper *ev);
   int execute_event(Log_event_wrapper *ev);
   void finalize_event(Log_event_wrapper *ev);
 

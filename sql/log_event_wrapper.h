@@ -82,9 +82,13 @@ public:
   void add_dependent(Log_event_wrapper *ev)
   {
     mysql_mutex_lock(&mutex);
-    DBUG_ASSERT(!is_finalized && ev != this && ev->raw_ev && raw_ev);
-    dependents.push_back(ev);
-    ev->incr_dependency();
+    // assert(!is_finalized && ev != this && ev->raw_ev && raw_ev);
+    // DBUG_ASSERT(!is_finalized && ev != this && ev->raw_ev && raw_ev);
+    if (!is_finalized)
+    {
+      dependents.push_back(ev);
+      ev->incr_dependency();
+    }
     mysql_mutex_unlock(&mutex);
   }
 

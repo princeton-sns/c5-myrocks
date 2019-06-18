@@ -1137,6 +1137,7 @@ public:
 
   /* Set of keys accessed by the group */
   std::unordered_set<Dependency_key> keys_accessed_by_group;
+  std::unordered_map<Dependency_key, Log_event_wrapper*> keys_group_event; 
 
   /* Set of all DBs accessed by the current group */
   std::unordered_set<std::string> dbs_accessed_by_group;
@@ -1149,7 +1150,7 @@ public:
   mysql_cond_t dep_empty_cond;
   std::atomic<ulonglong> num_workers_waiting{0};
 
-  Log_event_wrapper *prev_event;
+  Log_event_wrapper *prev_event= NULL;
   std::unordered_map<ulonglong, Table_map_log_event *> table_map_events;
   Log_event_wrapper *current_begin_event;
   bool trx_queued= false;
@@ -1166,7 +1167,7 @@ public:
   std::atomic<ulonglong> next_event_waits{0};
 
   bool enqueue_dep(
-      Log_event_wrapper *begin_event)
+      Log_event_wrapper* begin_event)
   {
     dep_queue.push(begin_event);
     return true;
@@ -1229,6 +1230,7 @@ public:
     table_map_events.clear();
 
     keys_accessed_by_group.clear();
+    keys_group_event.clear();
     dbs_accessed_by_group.clear();
 
     dep_full= false;
