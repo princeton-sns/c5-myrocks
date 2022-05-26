@@ -60,6 +60,7 @@ bool Dependency_slave_worker::execute_group()
   DBUG_ASSERT(current_event_index == 0);
   auto begin_event= get_begin_event(commit_order_mngr);
   auto ev= begin_event;
+  auto next= ev->next();
   Log_event* raw_ev = NULL;
   ulonglong master_commit_ts_millis = 0;
   ulonglong slave_commit_ts_millis = 0;
@@ -98,7 +99,9 @@ bool Dependency_slave_worker::execute_group()
       continue;
     }
     finalize_event(ev);
-    ev= ev->next();
+    next= ev->next();
+    delete ev;
+    ev= next;
   }
 
   // case: in case of error rollback if commit ordering is enabled
