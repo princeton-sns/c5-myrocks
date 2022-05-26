@@ -60,14 +60,36 @@ bool Dependency_slave_worker::execute_group()
   DBUG_ASSERT(current_event_index == 0);
   auto begin_event= get_begin_event(commit_order_mngr);
   auto ev= begin_event;
+  Log_event* raw_ev = NULL;
+  ulonglong master_commit_ts_millis = 0;
+  ulonglong slave_commit_ts_millis = 0;
+  ulonglong seqno = 0;
+  Slave_job_group *ptr_g = NULL;
 
   while (ev)
   {
+    raw_ev = ev->raw_event();
+    if (raw_ev->get_type_code() == ROWS_QUERY_LOG_EVENT &&
+        static_cast<Rows_query_log_event*>(raw_ev)->has_trx_meta_data())
+      {
+        master_commit_ts_millis=
+          static_cast<Rows_query_log_event*>(raw_ev)->extract_last_timestamp();
+      }
     if (unlikely(err= execute_event(ev)))
     {
       c_rli->dependency_worker_error= true;
       break;
     }
+
+    if (raw_ev->get_type_code() == XID_EVENT)
+      {
+        ptr_g= c_rli->gaq->get_job_group(raw_ev->mts_group_idx);
+        seqno= ptr_g->total_seqno;
+        slave_commit_ts_millis=
+          std::chrono::duration_cast<std::chrono::milliseconds>
+          (std::chrono::system_clock::now().time_since_epoch()).count();
+        sql_print_information("jhelt,comm_ms,%llu,%llu,%llu", seqno, master_commit_ts_millis, slave_commit_ts_millis);
+      }
 
     // case: restart trx if temporary error, see @slave_worker_ends_group
     if (unlikely(trans_retries && current_event_index == 0))
