@@ -22,11 +22,18 @@ INCLUDE_DIRECTORIES(
   ${SSL_INCLUDE_DIRS}
   ${CMAKE_BINARY_DIR}/sql
   ${CMAKE_HOME_DIRECTORY}/tbb/include
-  ${CMAKE_HOME_DIRECTORY}/cityhash/src
-)
+  ${CMAKE_BINARY_DIRECTORY}/cityhash/include
+  )
 
-FIND_LIBRARY(CITYHASH_LIB cityhash PATHS ${CMAKE_HOME_DIRECTORY}/cityhash/src/.libs)
-ADD_LIBRARY(cityhash SHARED IMPORTED)
+include(ExternalProject)
+ExternalProject_Add(libcityhash
+  PREFIX ${CMAKE_BINARY_DIR}/cityhash
+  CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/cityhash/configure --prefix=${CMAKE_BINARY_DIR}/cityhash
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/cityhash/src
+  BINARY_DIR ${CMAKE_BINARY_DIR}/cityhash
+  BUILD_COMMAND ${MAKE}
+  INSTALL_DIR ${CMAKE_BINARY_DIR}/cityhash)
+
 FIND_LIBRARY(TBB_LIB tbb_preview PATHS ${CMAKE_BINARY_DIR}/tbb_cmake_build/tbb_cmake_build_subdir_release)
 
 IF(WITH_JUNCTION)
@@ -284,8 +291,12 @@ SET (BINLOG_SOURCE uuid.cc rpl_gtid_misc.cc
 ADD_LIBRARY(binlog ${BINLOG_SOURCE})
 SET (RPL_SOURCE rpl_handler.cc rpl_tblmap.cc)
 ADD_DEPENDENCIES(binlog GenError)
-TARGET_LINK_LIBRARIES(binlog ${CITYHASH_LIB})
+
+ADD_DEPENDENCIES(binlog libcityhash)
+TARGET_LINK_LIBRARIES(binlog ${CMAKE_BINARY_DIR}/cityhash/lib/libcityhash.so)
+
 TARGET_LINK_LIBRARIES(binlog ${TBB_LIB})
+
 ADD_LIBRARY(rpl ${RPL_SOURCE})
 SET (MASTER_SOURCE rpl_master.cc)
 ADD_DEPENDENCIES(rpl GenError)
