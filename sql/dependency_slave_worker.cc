@@ -60,7 +60,7 @@ bool Dependency_slave_worker::execute_group()
   DBUG_ASSERT(current_event_index == 0);
   auto begin_event= get_begin_event(commit_order_mngr);
   auto ev= begin_event;
-  auto next= ev->next();
+  auto next= begin_event;
   Log_event* raw_ev = NULL;
   ulonglong master_commit_ts_millis = 0;
   ulonglong slave_commit_ts_millis = 0;
