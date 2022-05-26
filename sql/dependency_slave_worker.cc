@@ -100,7 +100,10 @@ bool Dependency_slave_worker::execute_group()
     }
     finalize_event(ev);
     next= ev->next();
-    delete ev;
+    if (ev != begin_event)
+    {
+      delete ev;
+    }
     ev= next;
   }
 
@@ -126,6 +129,7 @@ bool Dependency_slave_worker::execute_group()
   c_rli->executed_trx_count++;
   // c_rli->done_queue.push(begin_event);
   // c_rli->cleanup_group(begin_event);
+  delete begin_event;
 
   return err == 0 && !info_thd->killed && running_status == RUNNING;
 }
