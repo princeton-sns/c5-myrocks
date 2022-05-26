@@ -55,6 +55,11 @@ public:
     thd->EXIT_COND(&old_stage);
   }
 
+  ulonglong get_next_seqno()
+  {
+    return m_next_seqno;
+  }
+
   bool move_next_seqno(const ulonglong seqno)
   {
     mysql_mutex_lock(&m_mutex);
