@@ -6152,17 +6152,9 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
 
   if (auto snapshot_mngr= rli->get_snapshot_manager())
   {
-    ulonglong m_next_seqno = snapshot_mngr->get_next_seqno();
-    ulonglong lwm_seqno = rli->gaq->lwm.total_seqno;
-    
     if ((error= !snapshot_mngr->update_snapshot()))
     {
       goto end;
-    }
-
-    // Update time only after taking snapshot
-    if (lwm_seqno >= m_next_seqno) {
-      set_timespec_nsec(rli->last_clock, 0);
     }
   }
 
@@ -6215,7 +6207,7 @@ end:
   if (DBUG_EVALUATE_IF("check_slave_debug_group", 1, 0))
     DBUG_SUICIDE();
 #endif
-  //set_timespec_nsec(rli->last_clock, 0);
+  set_timespec_nsec(rli->last_clock, 0);
   
   DBUG_RETURN(error);
 }
