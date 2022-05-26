@@ -6049,6 +6049,8 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
   ulong cnt;
   bool error= FALSE;
   struct timespec curr_clock;
+  ulong nworkers= rli->slave_parallel_workers;
+  ulong waiting= 0;
 
   DBUG_ENTER("checkpoint_routine");
 
@@ -6069,6 +6071,10 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
                 rli->mts_group_status == Relay_log_info::MTS_IN_GROUP) ||
                rli->checkpoint_seqno == rli->checkpoint_group));
 
+  if (auto snapshot_mngr= rli->get_snapshot_manager())
+  {
+    waiting= snapshot_mngr->get_waiting();
+  }
   /*
     Currently, the checkpoint routine is being called by the SQL Thread.
     For that reason, this function is called call from appropriate points
@@ -6077,7 +6083,7 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
   */
   set_timespec_nsec(curr_clock, 0);
   ulonglong diff= diff_timespec(curr_clock, rli->last_clock);
-  if (!force && diff < period)
+  if (!force && diff < period && waiting < nworkers)
   {
     /*
       We do not need to execute the checkpoint now because

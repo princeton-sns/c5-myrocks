@@ -13,6 +13,7 @@ class Snapshot_manager
   mysql_mutex_t m_mutex;
   mysql_cond_t m_cond;
   ulonglong m_next_seqno= 0;
+  ulong m_waiting= 0;
 
 public:
   Snapshot_manager(Relay_log_info *m_rli) : m_rli(m_rli)
@@ -23,6 +24,15 @@ public:
 
   bool init();
   bool update_snapshot(bool force= false);
+
+  ulong get_waiting()
+  {
+    ulong w = -1;
+    mysql_mutex_lock(&m_mutex);
+    w = m_waiting;
+    mysql_mutex_unlock(&m_mutex);
+    return w;
+  }
 
   void set_snapshot(THD *thd)
   {
@@ -45,6 +55,7 @@ public:
     PSI_stage_info old_stage;
 
     mysql_mutex_lock(&m_mutex);
+    m_waiting += 1;
     thd->ENTER_COND(&m_cond, &m_mutex,
                     &stage_worker_waiting_for_snapshot,
                     &old_stage);
@@ -52,6 +63,7 @@ public:
     {
       mysql_cond_wait(&m_cond, &m_mutex);
     }
+    m_waiting -= 1;
     thd->EXIT_COND(&old_stage);
   }
 
