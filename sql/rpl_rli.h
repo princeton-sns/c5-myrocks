@@ -1164,7 +1164,7 @@ public:
 
   Log_event_wrapper *prev_event= NULL;
   std::unordered_map<ulonglong, Table_map_log_event *> table_map_events;
-  Log_event_wrapper *current_begin_event;
+  Log_event_wrapper *current_begin_event = NULL;
   bool trx_queued= false;
   bool dep_sync_group= false;
 
