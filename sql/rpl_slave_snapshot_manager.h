@@ -15,6 +15,7 @@ class Snapshot_manager
   ulonglong m_last_snapshot_ms= 0;
   ulonglong m_next_seqno= 0;
   ulong m_waiting= 0;
+  uint m_behind_ms= 0;
 
 public:
   Snapshot_manager(Relay_log_info *m_rli) : m_rli(m_rli)
@@ -28,9 +29,18 @@ public:
 
   ulonglong get_last_snapshot_ms()
   {
-    ulong t = -1;
+    ulonglong t = -1;
     mysql_mutex_lock(&m_mutex);
     t = m_last_snapshot_ms;
+    mysql_mutex_unlock(&m_mutex);
+    return t;
+  }
+
+  uint get_behind_ms()
+  {
+    uint t = -1;
+    mysql_mutex_lock(&m_mutex);
+    t = m_behind_ms;
     mysql_mutex_unlock(&m_mutex);
     return t;
   }

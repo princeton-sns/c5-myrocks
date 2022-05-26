@@ -6074,10 +6074,12 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
 
   if (auto snapshot_mngr= rli->get_snapshot_manager())
   {
+
     waiting= snapshot_mngr->get_waiting();
     since_ms= (std::chrono::duration_cast<std::chrono::milliseconds>
       (std::chrono::system_clock::now().time_since_epoch()).count()
       - snapshot_mngr->get_last_snapshot_ms()) * 1000000ULL;
+    since_ms= since_ms + static_cast<ulonglong>(snapshot_mngr->get_behind_ms() * 1000000ULL);
   }
 
   /*
