@@ -17,7 +17,7 @@ private:
   Log_event_wrapper                    *begin_ev;
 
   // events that depend on us
-  std::vector<Log_event_wrapper*> dependents;
+  std::set<Log_event_wrapper*> dependents;
   // number of events that we depend on
   ulonglong dependencies= 0;
 
@@ -86,8 +86,9 @@ public:
     // DBUG_ASSERT(!is_finalized && ev != this && ev->raw_ev && raw_ev);
     if (!is_finalized)
     {
-      dependents.push_back(ev);
-      ev->incr_dependency();
+      auto ret = dependents.insert(ev);
+      if (ret.second == true)
+        ev->incr_dependency();
     }
     mysql_mutex_unlock(&mutex);
   }
