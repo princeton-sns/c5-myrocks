@@ -10,12 +10,13 @@ class Snapshot_manager
   Relay_log_info *m_rli= NULL;
   std::shared_ptr<explicit_snapshot> m_snapshot;
 
+  std::chrono::system_clock::time_point m_last_snapshot_ms {};
+  std::chrono::microseconds m_behind_ms {0};
+
   mysql_mutex_t m_mutex;
   mysql_cond_t m_cond;
-  ulonglong m_last_snapshot_ms= 0;
   ulonglong m_next_seqno= 0;
   ulong m_waiting= 0;
-  uint m_behind_ms= 0;
 
 public:
   Snapshot_manager(Relay_log_info *m_rli) : m_rli(m_rli)
@@ -27,20 +28,18 @@ public:
   bool init();
   bool update_snapshot(bool force= false);
 
-  ulonglong get_last_snapshot_ms()
+  std::chrono::system_clock::time_point get_last_snapshot_time()
   {
-    ulonglong t = -1;
     mysql_mutex_lock(&m_mutex);
-    t = m_last_snapshot_ms;
+    std::chrono::system_clock::time_point t = m_last_snapshot_ms;
     mysql_mutex_unlock(&m_mutex);
     return t;
   }
 
-  uint get_behind_ms()
+  std::chrono::microseconds get_behind_ms()
   {
-    uint t = -1;
     mysql_mutex_lock(&m_mutex);
-    t = m_behind_ms;
+    std::chrono::microseconds t = m_behind_ms;
     mysql_mutex_unlock(&m_mutex);
     return t;
   }

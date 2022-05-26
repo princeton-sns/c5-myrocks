@@ -10,12 +10,13 @@ bool Snapshot_manager::init()
 bool Snapshot_manager::update_snapshot(bool force)
 {
   const auto lwm_seqno= m_rli->gaq->lwm.total_seqno;
-  ulonglong now= -1;
-  ulonglong seqno= -1;
-  double pro= 0.0;
-  uint period_ms= opt_mts_checkpoint_period;
-  uint diff_ms= -1;
+
   bool ret= true;
+  std::chrono::system_clock::time_point now;
+  std::chrono::microseconds diff_ms;
+  std::chrono::microseconds period_ms {opt_mts_checkpoint_period};
+  double pro;
+  ulonglong seqno;
 
   mysql_mutex_lock(&m_mutex);
 
@@ -36,22 +37,23 @@ bool Snapshot_manager::update_snapshot(bool force)
   }
 
   m_snapshot= m_rli->info_thd->get_explicit_snapshot();
-  now= std::chrono::duration_cast<std::chrono::milliseconds>
-    (std::chrono::system_clock::now().time_since_epoch()).count();
-  diff_ms= (uint)(now - m_last_snapshot_ms);
+
+  now= std::chrono::system_clock::now();
+  diff_ms= std::chrono::duration_cast<std::chrono::microseconds>(now - m_last_snapshot_ms);
+
   m_last_snapshot_ms= now;
 
-  sql_print_information("jhelt,snap_ms,%llu,%llu", m_next_seqno, m_last_snapshot_ms);
+  sql_print_information("jhelt,snap_ms,%llu,%lu", m_next_seqno, m_last_snapshot_ms.time_since_epoch().count());
 
   if (!force && (diff_ms > period_ms || (period_ms - diff_ms) < m_behind_ms)) { // Falling behind OR catching up
     m_behind_ms= m_behind_ms + diff_ms - period_ms;
   } else { // Fully caught up
-    m_behind_ms= 0;
+    m_behind_ms= std::chrono::microseconds {0};
   }
 
   DBUG_ASSERT(force || m_rli->mts_groups_assigned >= m_next_seqno);
 
-  pro= (double)period_ms/(period_ms + m_behind_ms);
+  pro= (double)period_ms.count()/(period_ms + m_behind_ms).count();
   seqno= (ulonglong)(pro * (m_rli->mts_groups_assigned - m_next_seqno));
   // Advance next snapshot sequence number
   if (m_next_seqno == m_rli->mts_groups_assigned || seqno == 0) {

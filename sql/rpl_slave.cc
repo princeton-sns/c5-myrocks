@@ -6043,14 +6043,14 @@ err:
 
    @return FALSE success, TRUE otherwise
 */
-bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
+bool mts_checkpoint_routine(Relay_log_info *rli, std::chrono::microseconds period,
                             bool force, bool need_data_lock)
 {
   ulong cnt;
   bool error= FALSE;
   struct timespec curr_clock;
+  std::chrono::nanoseconds since_ms {0};
   ulong nworkers= rli->slave_parallel_workers;
-  ulonglong since_ms= 0;
   ulong waiting= 0;
 
   DBUG_ENTER("checkpoint_routine");
@@ -6076,10 +6076,8 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
   {
 
     waiting= snapshot_mngr->get_waiting();
-    since_ms= (std::chrono::duration_cast<std::chrono::milliseconds>
-      (std::chrono::system_clock::now().time_since_epoch()).count()
-      - snapshot_mngr->get_last_snapshot_ms()) * 1000000ULL;
-    since_ms= since_ms + static_cast<ulonglong>(snapshot_mngr->get_behind_ms() * 1000000ULL);
+    since_ms= std::chrono::system_clock::now() - snapshot_mngr->get_last_snapshot_time();
+    since_ms= since_ms + snapshot_mngr->get_behind_ms();
   }
 
   /*
@@ -6089,7 +6087,7 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
     here to check if it is time to execute it.
   */
   set_timespec_nsec(curr_clock, 0);
-  ulonglong diff= diff_timespec(curr_clock, rli->last_clock);
+  std::chrono::nanoseconds diff {diff_timespec(curr_clock, rli->last_clock)};
   if (!force && diff < period && (since_ms < period || waiting < nworkers))
   {
     /*
@@ -6536,7 +6534,7 @@ void slave_stop_workers(Relay_log_info *rli, bool *mts_inited)
   }
 
   if (thd->killed == THD::NOT_KILLED)
-    (void) mts_checkpoint_routine(rli, 0, false, true/*need_data_lock=true*/); // TODO:consider to propagate an error out of the function
+    (void) mts_checkpoint_routine(rli, std::chrono::microseconds(0), false, true/*need_data_lock=true*/); // TODO:consider to propagate an error out of the function
 
   for (i= rli->workers.elements - 1; i >= 0; i--)
   {
@@ -8467,13 +8465,12 @@ static Log_event* next_event(Relay_log_info* rli)
       if (rli->is_parallel_exec() &&
           (period_check || force))
       {
-        ulonglong period= static_cast<ulonglong>(opt_mts_checkpoint_period * 1000000ULL);
         mysql_mutex_unlock(&rli->data_lock);
         /*
           At this point the coordinator has is delegating jobs to workers and
           the checkpoint routine must be periodically invoked.
         */
-        (void) mts_checkpoint_routine(rli, period, force, true/*need_data_lock=true*/); // TODO: ALFRANIO ERROR
+        (void) mts_checkpoint_routine(rli, std::chrono::microseconds(opt_mts_checkpoint_period), force, true/*need_data_lock=true*/); // TODO: ALFRANIO ERROR
         DBUG_ASSERT(!force ||
                     (force && (rli->checkpoint_seqno <= (rli->checkpoint_group - 1))) ||
                     sql_slave_killed(thd, rli));
@@ -8650,7 +8647,7 @@ static Log_event* next_event(Relay_log_info* rli)
         {
           int ret= 0;
           struct timespec waittime;
-          ulonglong period= static_cast<ulonglong>(opt_mts_checkpoint_period * 1000000ULL);
+          ulonglong period= static_cast<ulonglong>(opt_mts_checkpoint_period * 1000ULL);
           ulong signal_cnt= rli->relay_log.signal_cnt;
 
           mysql_mutex_unlock(log_lock);
@@ -8661,7 +8658,7 @@ static Log_event* next_event(Relay_log_info* rli)
               However, workers are executing their assigned jobs and as such
               the checkpoint routine must be periodically invoked.
             */
-            (void) mts_checkpoint_routine(rli, period, false, true/*need_data_lock=true*/); // TODO: ALFRANIO ERROR
+            (void) mts_checkpoint_routine(rli, std::chrono::microseconds(opt_mts_checkpoint_period), false, true/*need_data_lock=true*/); // TODO: ALFRANIO ERROR
             mysql_mutex_lock(log_lock);
             // More to the empty relay-log all assigned events done so reset it.
             // Reset the flag of slave_has_caught_up

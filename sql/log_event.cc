@@ -7660,7 +7660,7 @@ int Rotate_log_event::do_update_pos(Relay_log_info *rli)
         synchronization point. For that reason, the checkpoint
         routine is being called here.
       */
-      if ((error= mts_checkpoint_routine(rli, 0, false,
+      if ((error= mts_checkpoint_routine(rli, std::chrono::microseconds(0), false,
                                          true/*need_data_lock=true*/)))
         goto err;
     }

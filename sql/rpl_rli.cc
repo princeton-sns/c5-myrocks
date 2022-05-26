@@ -1704,7 +1704,7 @@ int Relay_log_info::stmt_done(my_off_t event_master_log_pos)
         synchronization. For that reason, the checkpoint routine is
         called here.
       */
-      error= mts_checkpoint_routine(this, 0, false,
+      error= mts_checkpoint_routine(this, std::chrono::microseconds(0), false,
                                     true/*need_data_lock=true*/);
     }
     if (!error)

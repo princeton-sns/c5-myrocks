@@ -354,7 +354,7 @@ extern char *master_ssl_ca, *master_ssl_capath, *master_ssl_cert;
 extern char *master_ssl_cipher, *master_ssl_key;
        
 int mts_recovery_groups(Relay_log_info *rli);
-bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
+bool mts_checkpoint_routine(Relay_log_info *rli, std::chrono::microseconds period,
                             bool force, bool need_data_lock);
 #endif /* HAVE_REPLICATION */
 
