@@ -24,6 +24,7 @@
 #include "debug_sync.h"
 #include <hash.h>
 #include "rpl_slave_commit_order_manager.h" // Commit_order_manager
+#include "rpl_slave_snapshot_manager.h" // Snapshot_manger
 
 #ifndef DBUG_OFF
   ulong w_rr= 0;
@@ -270,6 +271,7 @@ int Slave_worker::init_worker(Relay_log_info * rli, ulong i)
 
   c_rli= rli;
   set_commit_order_manager(c_rli->get_commit_order_manager());
+  set_snapshot_manager(c_rli->get_snapshot_manager());
 
   if (rli_init_info(false) ||
       DBUG_EVALUATE_IF("inject_init_worker_init_info_fault", true, false))
@@ -1868,6 +1870,10 @@ void wait_for_dep_workers_to_finish(Relay_log_info *rli,
 {
   DBUG_ASSERT(opt_mts_dependency_replication);
 
+  auto mngr= rli->get_snapshot_manager();
+  if (mngr)
+    mngr->move_next_seqno(rli->mts_groups_assigned);
+
   const ulonglong num= partial_trx ? 1 : 0;
   while (rli->num_in_flight_trx.load() > num && !rli->info_thd->killed)
   {
@@ -2454,6 +2460,7 @@ int slave_worker_exec_job(Slave_worker *worker, Relay_log_info *rli)
     ptr_g->worker_id= worker->id;
     ptr_g->shifted= worker->bitmap_shifted;
     worker->bitmap_shifted= 0;
+    worker->set_group_seqno(ptr_g->total_seqno);
   }
 
   thd->server_id = ev->server_id;
