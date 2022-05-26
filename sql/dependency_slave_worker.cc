@@ -170,8 +170,7 @@ Dependency_slave_worker::finalize_event(Log_event_wrapper *ev)
   for (const auto& key : ev->keys)
   {
     Relay_log_info::Last_writer_map::accessor ac;    
-    c_rli->dep_key_lookup.find(ac, key); 
-    if (ac->second == ev)
+    if (c_rli->dep_key_lookup.find(ac, key) && ac->second == ev)
     {
       c_rli->dep_key_lookup.erase(ac);
     }
