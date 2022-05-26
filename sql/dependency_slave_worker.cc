@@ -20,7 +20,7 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
   Log_event_wrapper* ret= NULL;
   while (!info_thd->killed &&
          running_status == RUNNING &&
-         (ret= c_rli->dequeue_dep()) == NULL) 
+         (ret= c_rli->dequeue_dep()) == NULL)
   {
     my_sleep(1);
   }
@@ -28,6 +28,12 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
   // case: place ourselves in the commit order queue
   if (ret && co_mngr != NULL)
   {
+      DBUG_ASSERT(ret->is_begin_event == true);
+
+      while (!ret->whole_group_scheduled) {
+          my_sleep(1);
+      }
+
     DBUG_ASSERT(opt_mts_dependency_order_commits);
     set_current_db(ret->get_db());
     co_mngr->register_trx(this);
@@ -85,7 +91,7 @@ bool Dependency_slave_worker::execute_group()
   {
     DBUG_ASSERT(c_rli->num_in_flight_trx > 0);
     prev_in_flight= c_rli->num_in_flight_trx.fetch_sub(1);
-    if (prev_in_flight <= 2) 
+    if (prev_in_flight <= 2)
     {
       mysql_mutex_lock(&c_rli->dep_lock);
       mysql_cond_signal(&c_rli->dep_trx_all_done_cond);
