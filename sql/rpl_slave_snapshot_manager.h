@@ -12,6 +12,7 @@ class Snapshot_manager
 
   mysql_mutex_t m_mutex;
   mysql_cond_t m_cond;
+  ulonglong m_last_snapshot_ms= 0;
   ulonglong m_next_seqno= 0;
   ulong m_waiting= 0;
 
@@ -24,6 +25,15 @@ public:
 
   bool init();
   bool update_snapshot(bool force= false);
+
+  ulonglong get_last_snapshot_ms()
+  {
+    ulong t = -1;
+    mysql_mutex_lock(&m_mutex);
+    t = m_last_snapshot_ms;
+    mysql_mutex_unlock(&m_mutex);
+    return t;
+  }
 
   ulong get_waiting()
   {

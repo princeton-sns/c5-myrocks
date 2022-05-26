@@ -6050,6 +6050,7 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
   bool error= FALSE;
   struct timespec curr_clock;
   ulong nworkers= rli->slave_parallel_workers;
+  ulonglong since_ms= 0;
   ulong waiting= 0;
 
   DBUG_ENTER("checkpoint_routine");
@@ -6074,7 +6075,11 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
   if (auto snapshot_mngr= rli->get_snapshot_manager())
   {
     waiting= snapshot_mngr->get_waiting();
+    since_ms= std::chrono::duration_cast<std::chrono::milliseconds>
+      (std::chrono::system_clock::now().time_since_epoch()).count()
+      - snapshot_mngr->get_last_snapshot_ms();
   }
+
   /*
     Currently, the checkpoint routine is being called by the SQL Thread.
     For that reason, this function is called call from appropriate points
@@ -6083,7 +6088,7 @@ bool mts_checkpoint_routine(Relay_log_info *rli, ulonglong period,
   */
   set_timespec_nsec(curr_clock, 0);
   ulonglong diff= diff_timespec(curr_clock, rli->last_clock);
-  if (!force && diff < period && waiting < nworkers)
+  if (!force && diff < period && (since_ms < period || waiting < nworkers))
   {
     /*
       We do not need to execute the checkpoint now because

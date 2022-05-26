@@ -11,7 +11,6 @@ bool Snapshot_manager::update_snapshot(bool force)
 {
   const auto lwm_seqno= m_rli->gaq->lwm.total_seqno;
   bool ret= true;
-  ulonglong snapshot_ms = 0;
 
   mysql_mutex_lock(&m_mutex);
 
@@ -32,10 +31,10 @@ bool Snapshot_manager::update_snapshot(bool force)
   }
 
   m_snapshot= m_rli->info_thd->get_explicit_snapshot();
-  snapshot_ms=
+  m_last_snapshot_ms=
     std::chrono::duration_cast<std::chrono::milliseconds>
     (std::chrono::system_clock::now().time_since_epoch()).count();
-  sql_print_information("jhelt,snap_ms,%llu,%llu", m_next_seqno, snapshot_ms);
+  sql_print_information("jhelt,snap_ms,%llu,%llu", m_next_seqno, m_last_snapshot_ms);
 
   DBUG_ASSERT(force || m_rli->mts_groups_assigned >= m_next_seqno);
 
