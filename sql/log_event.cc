@@ -3333,6 +3333,7 @@ void Log_event::schedule_dep(Relay_log_info *rli)
 
     rli->enqueue_dep(rli->current_begin_event);
     rli->queued_trx_count++;
+    status_var_increment(thd->status_var.com_stat[SQLCOM_QUEUED]);
 
     /*
     Log_event_wrapper *temp;

@@ -4529,6 +4529,8 @@ SHOW_VAR com_status_vars[]= {
   {"change_master",        (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_CHANGE_MASTER]), SHOW_LONG_STATUS},
   {"check",                (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_CHECK]), SHOW_LONG_STATUS},
   {"checksum",             (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_CHECKSUM]), SHOW_LONG_STATUS},
+  {"queued",               (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_QUEUED]), SHOW_LONG_STATUS},
+  {"dequeued",             (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_DEQUEUED]), SHOW_LONG_STATUS},
   {"commit",               (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_COMMIT]), SHOW_LONG_STATUS},
   {"create_db",            (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_CREATE_DB]), SHOW_LONG_STATUS},
   {"create_event",         (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_CREATE_EVENT]), SHOW_LONG_STATUS},
