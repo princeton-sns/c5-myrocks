@@ -25,15 +25,6 @@ Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
     my_sleep(1);
   }
 
-
-  if (ret) {
-    DBUG_ASSERT(ret->is_begin_event == true);
-
-    while (!ret->whole_group_scheduled) {
-      my_sleep(1);
-    }
-  }
-
   // case: place ourselves in the commit order queue
   if (ret && co_mngr != NULL)
   {
