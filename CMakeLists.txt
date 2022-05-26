@@ -46,6 +46,7 @@ MESSAGE(STATUS "Running cmake version ${CMAKE_VERSION}")
 FIND_PACKAGE(Git)
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # First, decide about build type (debug or release)
 # If custom compiler flags are set or cmake is invoked with -DCMAKE_BUILD_TYPE, 
@@ -169,10 +170,10 @@ IF(WITH_DEFAULT_FEATURE_SET)
   INCLUDE(${CMAKE_SOURCE_DIR}/cmake/build_configurations/feature_set.cmake)
 ENDIF()
 
-SET(TBB_ROOT ${CMAKE_HOME_DIRECTORY}/tbb)
-INCLUDE(${TBB_ROOT}/cmake/TBBBuild.cmake)
-tbb_build(TBB_ROOT ${TBB_ROOT} CONFIG_DIR TBB_DIR MAKE_ARGS tbb_cpf=1)
-# FIND_PACKAGE(TBB REQUIRED tbb_preview)
+SET(TBB_DIR ${CMAKE_SOURCE_DIR}/tbb)
+INCLUDE(${TBB_DIR}/cmake/TBBBuild.cmake)
+tbb_build(TBB_ROOT ${TBB_DIR} CONFIG_DIR TBB_DIR MAKE_ARGS tbb_cpf=1)
+FIND_PACKAGE(TBB REQUIRED tbb_preview)
 
 
 

@@ -25,9 +25,9 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_HOME_DIRECTORY}/cityhash/src
 )
 
-FIND_LIBRARY(CITYHASH_LIB cityhash PATHS ${CMAKE_HOME_DIRECTORY}/cityhash/src/.libs) 
+FIND_LIBRARY(CITYHASH_LIB cityhash PATHS ${CMAKE_HOME_DIRECTORY}/cityhash/src/.libs)
 ADD_LIBRARY(cityhash SHARED IMPORTED)
-FIND_LIBRARY(TBB_LIB tbb_preview PATHS ${CMAKE_HOME_DIRECTORY}/sql/tbb_cmake_build/tbb_cmake_build_subdir_release) 
+FIND_LIBRARY(TBB_LIB tbb_preview PATHS ${CMAKE_BINARY_DIR}/tbb_cmake_build/tbb_cmake_build_subdir_release)
 
 IF(WITH_JUNCTION)
   SET(JUNCTION_LIBRARIES ${JUNCTION_LIBRARIES}
